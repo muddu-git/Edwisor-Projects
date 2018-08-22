@@ -1,0 +1,72 @@
+
+#Importing required libraries
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.cross_validation import cross_val_score
+
+#Reading Trainig set and Test set......Please replace the ur folder name  in place of ".." to run
+train = pd.read_csv('../input/train.csv').fillna(' ')
+test = pd.read_csv('../input/test.csv').fillna(' ')
+complete_text=pd.concat([train["comment_text"],test["comment_text"]])
+col_names=train.columns[2:]
+
+
+#Converting to Term Document Matrix with weight=TF*IDF
+
+tdm = TfidfVectorizer(analyzer='word',
+                                  token_pattern=r'\w{1,}',
+                                  stop_words='english',
+                                  max_features=5000)
+
+tdm.fit(complete_text)
+train_tdm=tdm.transform(train["comment_text"])
+test_tdm=tdm.transform(test["comment_text"])
+x_train=train_tdm.toarray()
+x_test=test_tdm.toarray()
+
+#Declaring Dataframe for capturing output
+output=pd.DataFrame(test["id"])
+#list to store cross validation scores
+scores=[]    
+
+
+
+#Applying Logistic model for all target  columns
+for col_name in col_names:
+    y_train=train[col_name].values
+    
+    #logistic Regression
+    lr=LogisticRegression()
+    lr.fit(x_train,y_train)
+    #cross validation scores
+    cv_score=np.mean(cross_val_score(lr,x_train,y_train,scoring='roc_auc',cv=3))
+    print("cv score for {} is {}".format(col_name,cv_score))
+    scores.append(cv_score)
+    output[col_name]=lr.predict_proba(x_test)[:,1]
+    
+ 
+#writing Output
+output.to_csv("output.csv",index=False)
+print("Total CV Score is {}".format(np.mean(scores)))
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+
+
+
+
+
+
