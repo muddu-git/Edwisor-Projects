@@ -1,0 +1,103 @@
+#Loading Required packages
+x=c("stats","C50","base","ModelMetrics")
+lapply(x, require, character.only = TRUE)
+
+#Reading Train and Test Dataset
+setwd("C:/Users/mudmoham/Documents/pr/Churn Reduction/Input")
+data_train=read.csv("Train_data.csv",na.strings = c(""," ","NA"))
+data_test=read.csv("Test_data.csv",na.strings = c(""," ","NA"))
+data=rbind(data_train,data_test)
+
+#Missing Value Analysis
+sum(is.na.data.frame(data))
+
+#Outlier Analysis
+#to optimize the memory consumption each level of column converted to numeric
+#convert categorical to factor
+for (i in 1:ncol(data))
+{
+  if(class(data[,i])=='factor')
+  {
+    data[,i]=factor(data[,i],labels = 1:length(levels(factor(data[,i]))))
+  }
+}
+
+#Replacing the outliers with 0.95 and 0.05 percentile values
+for (i in colnames(data)) 
+{
+  if(class(data[,i])=="numeric" | class(data[,i])=="integer")
+  {
+    quantiles <- quantile( data[,i], c(0.75, 0.25 ) )
+    iqr=quantiles[1]-quantiles[2]
+    minimum=quantiles[2]-(iqr*1.5)
+    maximum=quantiles[1]+(iqr*1.5)
+    data[data[,i]<minimum,i] = minimum
+    data[data[,i]>maximum,i] = maximum
+  }
+}
+
+#Feature Selection
+#variables which are highly correlated:"total.day.minutes","total.eve.minutes","total.night.minutes","total.intl.minutes"
+
+#chi-square test for categorical
+# for (i in colnames(data)) {
+#   if ((i !="Churn") & (class(data[,i])=="factor")){
+#     print(i)
+#     print(chisq.test(table(data$Churn,data[,i])))
+#   }
+# }
+
+#"phone.number" p-value is greater than 0.05,Hence can be deleted
+data=subset(data,select=-c(total.day.minutes,total.eve.minutes,total.night.minutes,total.intl.minutes,phone.number))
+
+#Feature Scaling--Normalization 
+for (i in 1:ncol(data)) 
+{
+  if(class(data[,i])=="numeric" | class(data[,i])=="integer")
+  {
+    data[,i]=(data[,i]-min(data[,i]))/(max(data[,i])-min(data[,i]))
+  } 
+}
+
+#Dividing the data into train and test splits
+train=data[1:nrow(data_train),]
+test=data[1:nrow(data_test),]
+
+#Modelling
+#selected Decision Tree as it giving less false negative rate and good accuracy(98%)
+#Tuned Decision Tree,ran the model with 100,200,300,500,1000 trails,all are giving same accuracies
+dt=C50::C5.0(Churn ~ .,train,rules=TRUE,trials=100)
+y_pred=predict(dt,test[,-16],class=TRUE)
+
+#Model Evaluation
+cm_c50=table(test$Churn,y_pred)
+TN=cm_c50[1,1]
+FP=cm_c50[1,2]
+FN=cm_c50[2,1]
+TP=cm_c50[2,2]
+cat("*****Decision Tree Evaluation Metrics********")
+cat("Accuracy is:",(TN+TP)/(TN+TP+FP+FN))
+cat("Specificity or True Negative Rate is ",(TN*100/(TN+FP)))	
+cat("Recall or sensitivity or True Postive Rate is ",(TP*100/(TP+FN)))
+cat("False Positive Rate is ",(FP*100)/(FP+TN))
+cat("False Negative Rate is ",(FN*100)/(FN+TP))
+cat("****************************************************")
+
+cat("*********  OUTPUT *************")
+cat("Churn Score=",(sum(y_pred==2)*100)/length(y_pred),"%")
+cat("Number of persons who are churning out:",sum(y_pred==2))
+cat("Number of persons who are not churning out:",sum(y_pred==1))
+cat("*******************************")
+
+#Writing output to file
+output=data.frame(data_test)
+y_pred=as.character(as.factor(y_pred))   
+y_pred[y_pred=="1"]="False"
+y_pred[y_pred=="2"]="True"
+output["Churn Predicted"]=y_pred
+output["Churn Probabilities"]=predict(dt,test[,-16],type = "prob")[,2]
+write.csv(output,"C:/Users/mudmoham/Documents/pr/Churn Reduction/output/R_output.csv",row.names = FALSE)
+
+
+
+
